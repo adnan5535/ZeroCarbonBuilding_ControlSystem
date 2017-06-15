@@ -1,3 +1,6 @@
+// reddit.com/r/startledcats
+// Because all good things start with cats
+
 #include <MuxShield.h>
 #include <SD.h>
 #include <TimeLib.h>
@@ -31,23 +34,22 @@ unsigned int localPort = 8888;  // local port to listen for UDP packets
 #define thermT13 12 //Mux Pin 13
 #define thermT14 13 //Mux Pin 14
 #define thermT16 14 //Mux Pin 15   thermT15 supposedly missing
-#define numThermistors 15
+#define numThermistors 15 // Total number of thermistors in system. Modify this number if adding/removing thermistors
 
 #define FlowF1 0 // Flow meter numbering, Mega Pin 21
 #define FlowF2 1 // Mega Pin 20
 #define FlowF3 2 // Mega Pin 19
 #define FlowF4 3 // Mega Pin 18
-#define numFlowmeters 4
+#define numFlowmeters 4 // Total number of flowmeters in system. Modify this number if adding/removing flowmeters
 
-#define numCTs 15 // Number of Current Transducers
+#define numCTs 15 // Number of Current Transducers. Modify this number if adding/removing current transducers
 
 unsigned int numRisingEdges1 = 0, numRisingEdges2 = 0, numRisingEdges3 = 0, numRisingEdges4 = 0;
 unsigned long time_stamp = 0;
 boolean useSameLoop_forflowmeters = false;
 
 void setup() {
-    Serial3.begin(9600);
-    //Set I/O 1, I/O 2, and I/O 3 as analog inputs
+    Serial3.begin(9600); // Using 9600 baudrate because I decided that is as high as I want to go while maintaining serial read data integrity
     muxShield.setMode(1,ANALOG_IN);
     time_stamp = millis();  
     attachInterrupt(2, flowmeter1_ISR, RISING); // Interrupt 2 on mega pin no 21
@@ -55,24 +57,23 @@ void setup() {
     attachInterrupt(4, flowmeter3_ISR, RISING); // Interrupt 4 on mega pin no 19
     attachInterrupt(5, flowmeter4_ISR, RISING); // Interrupt 5 on mega pin no 18
     
-    if (numThermistors >= numFlowmeters) useSameLoop_forflowmeters = true;
+    if (numThermistors >= numFlowmeters) useSameLoop_forflowmeters = true; // Trying to minimise loop iterations for optimized code. This allows the use of the same loop
+                                                                           // for reading thermistors and flowmeters if number of flowmeters is <= number of thermistors
 
     Serial3.print("Initializing SD card...");
-    // see if the card is present and can be initialized:
     if (!SD.begin(SD_chipSelect)) {
-      Serial3.println("Card failed, or not present");
-      // don't do anything more:
+      Serial3.println("Card failed, or not present. Data is not being logged.");
       return;
     }
-    Serial3.println("card initialized.");
+    Serial3.println("card initialized. Hurray!");
 
     if (Ethernet.begin(mac) == 0) {
-    // no point in carrying on, so do nothing forevermore:
+    Serial3.println("Uh oh. Failed to initialise internet connection.");
     }
     Serial3.print("IP number assigned by DHCP is ");
     Serial3.println(Ethernet.localIP());
     Udp.begin(localPort);
-    Serial3.println("waiting for sync");
+    Serial3.println("Waiting for sync");
     setSyncProvider(getNtpTime);
 }
 
@@ -93,20 +94,20 @@ void loop() {
     tempArray[thermIter] = readTherm(thermIter);
     if (thermIter == 0) dataString_therms += tempArray[thermIter]; // don't want comma before first value
     else dataString_therms += "," + String(tempArray[thermIter]);
-    if (useSameLoop_forflowmeters)
-      if (flowmeterIter++ < numFlowmeters){
+    if (useSameLoop_forflowmeters)  // Trying to use same loop for reading thermistors and flowmeters
+      if (flowmeterIter++ < numFlowmeters){   // Brace yourself. "flowmeter" being used so many times!
         flowmeterArray[flowmeterIter-1] = readFlowmeter(flowmeterIter);
         if (flowmeterIter == 0) dataString_flowmeters += flowmeterArray[flowmeterIter-1]; // don't want comma before first value
         else dataString_flowmeters += "," + String(flowmeterArray[flowmeterIter-1]);
         }
   }
-  if (!useSameLoop_forflowmeters)
+  if (!useSameLoop_forflowmeters) // This runs if number of flowmeters > number of thermistors
     for (flowmeterIter=0; flowmeterIter < numFlowmeters; flowmeterIter++){
       flowmeterArray[flowmeterIter] = readFlowmeter(flowmeterIter);
       if (flowmeterIter == 0) dataString_flowmeters += flowmeterArray[flowmeterIter]; // don't want comma before first value
       else dataString_flowmeters += "," + String(flowmeterArray[flowmeterIter]);
     }
-  for(int CTIter = 0; CTIter < numCTs; CTIter++){
+  for(int CTIter = 0; CTIter < numCTs; CTIter++){  // Possible future improvement: add this logic to the same loop as thermistors for more optimized code
     if(Serial3.available()){
       CTArray[CTIter] = Serial3.parseFloat();
       if (CTIter == 0) dataString_CTs += CTArray[CTIter]; // don't want comma before first value
@@ -114,30 +115,28 @@ void loop() {
     }
   }
   
-  time_t t = now(); // Store the current time in time 
-  dateString = String(day()) + "/" + String(month()) + "/" + String(year());
-  timeString = String(hour(t)) + ":" + String(minute(t)) + ":" + String(second(t));
+  time_t t = now(); // Store the current time in struct object t.
+  dateString = String(day()) + "-" + String(month()) + "-" + String(year()) + "  ";
+  timeString = String(hour(t)) + "h" + String(minute(t)) + "m" + String(second(t)) + "s";
   timeString_millis = millis();
-  comboDataString = dateString + "," + timeString + "," + timeString_millis + "," + dataString_therms + "," + dataString_flowmeters + "," + dataString_CTs;
+  comboDataString = dateString + "," + timeString + "," + timeString_millis + "," + dataString_therms + "," + dataString_flowmeters + "," + dataString_CTs; // C-C-C-C-C-C COMBO BREAKER
   
-  File fileHandle = SD.open(dateString + timeString + timeString_millis + ".csv", FILE_WRITE);
+  File fileHandle = SD.open(dateString + timeString + timeString_millis + ".csv", FILE_WRITE); // Create and open file for writing
   if (fileHandle) {
     fileHandle.println(comboDataString);
     fileHandle.close();
-    // print to the serial port too:
-    Serial3.println(comboDataString);
+    Serial3.println(comboDataString); // C-C-C-C-C-C COMBO BREAKER
   }
-  // if the file isn't open, pop up an error:
   else
-    Serial3.println("error opening data logging file");  
+    Serial3.println("error opening data logging file");
 }
 
 float readTherm(int thermPin){
    float thermVolt;
    float temp;
    
-   thermVolt = (muxShield.analogReadMS(1,thermPin)) * (5/1023) * 0.94; //0.94 empirical correction
-   temp = (1.8443 * pow(thermVolt,4)) - (14.248 * pow(thermVolt,3)) + (31.071 * pow(thermVolt,2)) + (6.5131 * thermVolt) - 38.282;
+   thermVolt = (muxShield.analogReadMS(1,thermPin)) * (5/1023) * 0.94; //0.94 empirical correction for error introduced by mux shield
+   temp = (1.8443 * pow(thermVolt,4)) - (14.248 * pow(thermVolt,3)) + (31.071 * pow(thermVolt,2)) + (6.5131 * thermVolt) - 38.282; // Based on curve fit. Excel sheet on Dropbox
    return(temp);
 }
 
@@ -146,7 +145,7 @@ float readFlowmeter(int flowmeterNum){
   
   if(millis() - time_stamp > 500)  
   {  
-    switch(flowmeterNum){
+    switch(flowmeterNum){ // switch case which reads a different flowmeter frequency depending on the function argument passed
       case FlowF1:
       detachInterrupt(2); // disable interrupts
       flowmeterFreq = numRisingEdges1 * 2; // 500 ms window. Multiply by 2 to get number of rising edges in 1 second
@@ -187,6 +186,7 @@ float readFlowmeter(int flowmeterNum){
   return(flowmeterFreq);
 }
 
+// Interrupt service routines for measuring flowmeter frequencies
 void flowmeter1_ISR(){
   numRisingEdges1++;
 }
@@ -212,13 +212,13 @@ byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
 time_t getNtpTime()
 {
   while (Udp.parsePacket() > 0) ; // discard any previously received packets
-  Serial.println("Transmit NTP Request");
+  Serial3.println("Transmit NTP Request");
   sendNTPpacket(timeServer);
   uint32_t beginWait = millis();
   while (millis() - beginWait < 1500) {
     int size = Udp.parsePacket();
     if (size >= NTP_PACKET_SIZE) {
-      Serial.println("Receive NTP Response");
+      Serial3.println("Receive NTP Response");
       Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
       unsigned long secsSince1900;
       // convert four bytes starting at location 40 to a long integer
@@ -226,10 +226,10 @@ time_t getNtpTime()
       secsSince1900 |= (unsigned long)packetBuffer[41] << 16;
       secsSince1900 |= (unsigned long)packetBuffer[42] << 8;
       secsSince1900 |= (unsigned long)packetBuffer[43];
-      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR;
+      return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR; // returns time
     }
   }
-  Serial.println("No NTP Response :-(");
+  Serial3.println("No NTP Response :-(");
   return 0; // return 0 if unable to get the time
 }
 
