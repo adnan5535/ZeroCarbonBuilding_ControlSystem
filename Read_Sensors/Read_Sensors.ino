@@ -3,12 +3,12 @@
 
 #include <MuxShield.h>
 #include <SD.h>
+#include <SPI.h>
 #include <TimeLib.h>
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 
 MuxShield muxShield; //Initialize the Mux Shield
-const int SD_chipSelect = 4;
 byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
 IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov
 
@@ -42,10 +42,13 @@ unsigned int localPort = 8888;  // local port to listen for UDP packets
 
 #define numCTs 15 // Number of Current Transducers. Modify this number if adding/removing current transducers
 
+unsigned long time_stamp = 0;
 boolean useSameLoop_forflowmeters = false;
+const int SD_chipSelect = 4;
+int ethInitErrcode;
 
 void setup() {
-    Serial3.begin(9600); // Using 9600 baudrate because I decided that is as high as I want to go while maintaining serial read data integrity
+    Serial.begin(9600); // Using 9600 baudrate because I decided that is as high as I want to go while maintaining serial read data integrity
     muxShield.setMode(1,ANALOG_IN);
     time_stamp = millis();  
     attachInterrupt(2, flowmeter1_ISR, RISING); // Interrupt 2 on mega pin no 21
@@ -55,20 +58,27 @@ void setup() {
     
     if (numThermistors >= numFlowmeters) useSameLoop_forflowmeters = true; // Trying to minimise loop iterations for optimized code. This allows the use of the same loop
                                                                            // for reading thermistors and flowmeters
-
-    Serial3.print("Initializing SD card...");
+    pinMode(4,OUTPUT);
+    pinMode(10,OUTPUT);
+    digitalWrite(10,HIGH);     // disable w5100 ethernet controller SPI chip select while setting up SD
+    digitalWrite(4,LOW);
+    Serial.print("Initializing SD card...");
     if (!SD.begin(SD_chipSelect))
-        Serial3.println("Card failed, or not present. Data is not being logged.");
+        Serial.println("Card failed, or not present. Data is not being logged.");
     else 
-        Serial3.println("card initialized. Hurray!");
+        Serial.println("Card initialized. Hurray!");    
 
-    if (Ethernet.begin(mac) == 0)
-        Serial3.println("Uh oh. Failed to initialise internet connection.");
-    Serial3.print("IP number assigned by DHCP is ");
-    Serial3.println(Ethernet.localIP());
-    Udp.begin(localPort);
-    Serial3.println("Waiting for sync");
-    setSyncProvider(getNtpTime);
+//    digitalWrite(10,LOW);
+//    digitalWrite(4,HIGH); // disable SD card pin select
+//    ethInitErrcode = Ethernet.begin(mac);
+//    if (ethInitErrcode == 0) // Program will wait here for some time and then proceed
+//        Serial.println("Uh oh. Failed to initialise internet connection.");
+//    delay(2000); // takes a second for the w5100 to get ready
+//    Serial.print("IP number assigned by DHCP is ");
+//    Serial.println(Ethernet.localIP());
+//    Udp.begin(localPort);
+//    Serial.println("Waiting for sync");
+//    setSyncProvider(getNtpTime);
 }
 
 float tempArray[numThermistors];
@@ -77,6 +87,9 @@ float flowmeterArray[numFlowmeters];
 float CTArray[numCTs];
 String dataString_therms, dataString_flowmeters, dataString_CTs;
 String dateString, timeString, timeString_millis, comboDataString;
+String fileExtension = ".csv";
+int fileNameModifier = 0;
+boolean fileCreated = false;
 
 void loop() {
     dataString_therms = "";
@@ -103,27 +116,31 @@ void loop() {
             else dataString_flowmeters += "," + String(flowmeterArray[flowmeterIter]);
         }
     for(int CTIter = 0; CTIter < numCTs; CTIter++){  // Possible future improvement: add this logic to the same loop as thermistors for more optimized code
-        if(Serial3.available()){
-            CTArray[CTIter] = Serial3.parseFloat();
+        if(Serial.available()){
+            CTArray[CTIter] = Serial.parseFloat();
             if (CTIter == 0) dataString_CTs += CTArray[CTIter]; // don't want comma before first value
             else dataString_CTs += "," + String(CTArray[CTIter]);
         }
     }
-    
+
     time_t t = now(); // Store the current time in struct object t.
-    dateString = String(day()) + "-" + String(month()) + "-" + String(year()) + "  ";
-    timeString = String(hour(t)) + "h" + String(minute(t)) + "m" + String(second(t)) + "s";
-    timeString_millis = millis();
-    comboDataString = dateString + "," + timeString + "," + timeString_millis + "," + dataString_therms + "," + dataString_flowmeters + "," + dataString_CTs; // C-C-C-C-C-C COMBO BREAKER
-    
-    File fileHandle = SD.open(dateString + timeString + timeString_millis + ".csv", FILE_WRITE); // Create and open file for writing
+    dateString = String(String(day()) + String("-") + String(month()) + String("-") + String(year()));
+    timeString = String(String(hour(t)) + String("h") + String(minute(t)) + String("m") + String(second(t)));
+    timeString_millis = millis(); // needs to be updated to reflect milliseconds since last minute
+
+    comboDataString = dateString + "," + timeString + ":" + timeString_millis + "," + dataString_therms + "," + dataString_flowmeters + "," + dataString_CTs; // C-C-C-C-C-C COMBO BREAKER
+    String fileName = String(fileNameModifier) + fileExtension;
+    if (!fileCreated)
+        while (SD.exists(fileName)) fileName = String(++fileNameModifier) + fileExtension;
+    fileCreated = true;
+    File fileHandle = SD.open(fileName, FILE_WRITE); // Create and open file for writing
     if (fileHandle) {
         fileHandle.println(comboDataString);
         fileHandle.close();
-        Serial3.println(comboDataString); // C-C-C-C-C-C COMBO BREAKER
+        Serial.println(comboDataString); // C-C-C-C-C-C COMBO BREAKER
     }
     else
-        Serial3.println("error opening data logging file");
+        Serial.println("Error opening data logging file");
 }
 
 float readTherm(int thermPin){
@@ -132,12 +149,13 @@ float readTherm(int thermPin){
     
     thermVolt = (muxShield.analogReadMS(1,thermPin)) * (5/1023) * 0.94; //0.94 empirical correction for error introduced by mux shield
     temp = (1.8443 * pow(thermVolt,4)) - (14.248 * pow(thermVolt,3)) + (31.071 * pow(thermVolt,2)) + (6.5131 * thermVolt) - 38.282; // Based on curve fit. Excel sheet on Dropbox
+    //temp = 5;
     return(temp);
 }
 
-float flowmeterFreq = 0; // declaring as global because if the first if in readFlowmeter doesn't get satisfied, returned frequency will be the previously measured frequency
+
+float flowmeterFreq = 0; // declaring as global because if the first if statement in readFlowmeter doesn't get satisfied, returned frequency will be the previously measured frequency
 unsigned int numRisingEdges1 = 0, numRisingEdges2 = 0, numRisingEdges3 = 0, numRisingEdges4 = 0;
-unsigned long time_stamp = 0;
 
 float readFlowmeter(int flowmeterNum){
     if(millis() - time_stamp > 500)  
@@ -146,6 +164,7 @@ float readFlowmeter(int flowmeterNum){
             case FlowF1:
             detachInterrupt(2); // disable interrupts
             flowmeterFreq = numRisingEdges1 * 2; // 500 ms window. Multiply by 2 to get number of rising edges in 1 second
+            //flowmeterFreq = 1;
             delay(40);
             numRisingEdges1 = 0;
             time_stamp = millis();  
@@ -155,6 +174,7 @@ float readFlowmeter(int flowmeterNum){
             case FlowF2:
             detachInterrupt(3);
             flowmeterFreq = numRisingEdges2 * 2; // 500 ms window. Multiply by 2 to get number of rising edges in 1 second
+            //flowmeterFreq = 2;
             delay(40);
             numRisingEdges2 = 0;
             time_stamp = millis();  
@@ -164,6 +184,7 @@ float readFlowmeter(int flowmeterNum){
             case FlowF3:
             detachInterrupt(4);
             flowmeterFreq = numRisingEdges3 * 2; // 500 ms window. Multiply by 2 to get number of rising edges in 1 second
+            //flowmeterFreq = 3;
             delay(40);
             numRisingEdges3 = 0;
             time_stamp = millis();  
@@ -173,12 +194,13 @@ float readFlowmeter(int flowmeterNum){
             case FlowF4:
             detachInterrupt(5);
             flowmeterFreq = numRisingEdges4 * 2; // 500 ms window. Multiply by 2 to get number of rising edges in 1 second
+            //flowmeterFreq = 4;
             delay(40);
             numRisingEdges4 = 0;
             time_stamp = millis();  
             attachInterrupt(5, flowmeter4_ISR, RISING); // we have done with this mesasurenment,enable interrups for next cycle
             break;
-      }
+        }   
     }
     return(flowmeterFreq);
 }
@@ -199,13 +221,13 @@ byte packetBuffer[NTP_PACKET_SIZE]; //buffer to hold incoming & outgoing packets
 time_t getNtpTime()
 {
     while (Udp.parsePacket() > 0) ; // discard any previously received packets
-    Serial3.println("Transmit NTP Request");
+    Serial.println("Transmit NTP Request");
     sendNTPpacket(timeServer);
     uint32_t beginWait = millis();
     while (millis() - beginWait < 1500) {
         int size = Udp.parsePacket();
         if (size >= NTP_PACKET_SIZE) {
-            Serial3.println("Receive NTP Response");
+            Serial.println("Receive NTP Response");
             Udp.read(packetBuffer, NTP_PACKET_SIZE);  // read packet into the buffer
             unsigned long secsSince1900;
             // convert four bytes starting at location 40 to a long integer
@@ -216,7 +238,7 @@ time_t getNtpTime()
             return secsSince1900 - 2208988800UL + timeZone * SECS_PER_HOUR; // returns time
         }
     }
-    Serial3.println("No NTP Response :-(");
+    Serial.println("No NTP Response :-(");
     return 0; // return 0 if unable to get the time
 }
 
