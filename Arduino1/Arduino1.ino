@@ -8,40 +8,20 @@
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 
-MuxShield muxShield; //Initialize the Mux Shield
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
-IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov
-
-const int timeZone = 0;     // GMT because daylight saving really throws a wrench in calcs
-EthernetUDP Udp;
-unsigned int localPort = 8888;  // local port to listen for UDP packets
-
-/* //Defining pins for thermistors - Row 1 on Mux
-#define thermT1 0 //Mux Pin 1
-#define thermT2 1 //Mux Pin 2
-#define thermT3 2 //Mux Pin 3
-#define thermT4 3 //Mux Pin 4
-#define thermT5 4 //Mux Pin 5
-#define thermT6 5 //Mux Pin 6
-#define thermT7 6 //Mux Pin 7
-#define thermT8 7 //Mux Pin 8
-#define thermT9 8 //Mux Pin 9
-#define thermT10 9 //Mux Pin 10
-#define thermT11 10 //Mux Pin 11
-#define thermT12 11 //Mux Pin 12
-#define thermT13 12 //Mux Pin 13
-#define thermT14 13 //Mux Pin 14
-#define thermT16 14 //Mux Pin 15   thermT15 supposedly missing */
 #define numThermistors 15 // Total number of thermistors in system. Modify this number if adding/removing thermistors
-
 #define FlowF1 0 // Flow meter numbering, Mega Pin 21
 #define FlowF2 1 // Mega Pin 20
 #define FlowF3 2 // Mega Pin 19
 #define FlowF4 3 // Mega Pin 18
 #define numFlowmeters 4 // Total number of flowmeters in system. Modify this number if adding/removing flowmeters
-
 #define numCTs 15 // Number of Current Transducers. Modify this number if adding/removing current transducers
 
+MuxShield muxShield; //Initialize the Mux Shield
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xED };
+IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov
+const int timeZone = 0;     // GMT because daylight saving really throws a wrench in calcs
+EthernetUDP Udp;
+unsigned int localPort = 8888;  // local port to listen for UDP packets
 unsigned long time_stamp = 0;
 boolean useSameLoop_forflowmeters = false;
 const int SD_chipSelect = 4;
@@ -49,13 +29,13 @@ int ethInitErrcode;
 
 void setup() {
     Serial.begin(9600); // Using 9600 baudrate because I decided that is as high as I want to go while maintaining serial read data integrity
+    Serial3.begin(9600);
     muxShield.setMode(1,ANALOG_IN);
     time_stamp = millis();  
     attachInterrupt(2, flowmeter1_ISR, RISING); // Interrupt 2 on mega pin no 21
     attachInterrupt(3, flowmeter2_ISR, RISING); // Interrupt 3 on mega pin no 20
     attachInterrupt(4, flowmeter3_ISR, RISING); // Interrupt 4 on mega pin no 19
     attachInterrupt(5, flowmeter4_ISR, RISING); // Interrupt 5 on mega pin no 18
-    
     if (numThermistors >= numFlowmeters) useSameLoop_forflowmeters = true; // Trying to minimise loop iterations for optimized code. This allows the use of the same loop
                                                                            // for reading thermistors and flowmeters
     pinMode(4,OUTPUT);
@@ -68,17 +48,23 @@ void setup() {
     else 
         Serial.println("Card initialized. Hurray!");    
 
-//    digitalWrite(10,LOW);
-//    digitalWrite(4,HIGH); // disable SD card pin select
-//    ethInitErrcode = Ethernet.begin(mac);
-//    if (ethInitErrcode == 0) // Program will wait here for some time and then proceed
-//        Serial.println("Uh oh. Failed to initialise internet connection.");
-//    delay(2000); // takes a second for the w5100 to get ready
-//    Serial.print("IP number assigned by DHCP is ");
-//    Serial.println(Ethernet.localIP());
-//    Udp.begin(localPort);
-//    Serial.println("Waiting for sync");
-//    setSyncProvider(getNtpTime);
+/* --------------------------------------------------------------------------------------
+   Note to Liz/Reegan: Uncomment this code block when you're ready to test the ethernet
+   shield and the time syncing feature. This was slowing down the initialization of the
+   code so I commented it for debugging.
+  ----------------------------------------------------------------------------------------
+    digitalWrite(10,LOW);
+    digitalWrite(4,HIGH); // disable SD card pin select
+    ethInitErrcode = Ethernet.begin(mac);
+    if (ethInitErrcode == 0) // Program will wait here for some time and then proceed
+        Serial.println("Uh oh. Failed to initialise internet connection.");
+    delay(2000); // takes a second for the w5100 to get ready
+    Serial.print("IP number assigned by DHCP is ");
+    Serial.println(Ethernet.localIP());
+    Udp.begin(localPort);
+    Serial.println("Waiting for sync");
+    setSyncProvider(getNtpTime);
+*/
 }
 
 float tempArray[numThermistors];
@@ -116,19 +102,19 @@ void loop() {
             else dataString_flowmeters += "," + String(flowmeterArray[flowmeterIter]);
         }
     for(int CTIter = 0; CTIter < numCTs; CTIter++){  // Possible future improvement: add this logic to the same loop as thermistors for more optimized code
-        if(Serial.available()){
-            CTArray[CTIter] = Serial.parseFloat();
+        if(Serial3.available()){
+            CTArray[CTIter] = Serial3.parseFloat();
             if (CTIter == 0) dataString_CTs += CTArray[CTIter]; // don't want comma before first value
             else dataString_CTs += "," + String(CTArray[CTIter]);
         }
     }
-
     time_t t = now(); // Store the current time in struct object t.
     dateString = String(String(day()) + String("-") + String(month()) + String("-") + String(year()));
     timeString = String(String(hour(t)) + String("h") + String(minute(t)) + String("m") + String(second(t)));
-    timeString_millis = millis(); // needs to be updated to reflect milliseconds since last minute
-
-    comboDataString = dateString + "," + timeString + ":" + timeString_millis + "," + dataString_therms + "," + dataString_flowmeters + "," + dataString_CTs; // C-C-C-C-C-C COMBO BREAKER
+    //timeString_millis = millis(); // needs to be updated to reflect milliseconds since last minute
+    comboDataString = dateString + "," + timeString + "," + dataString_therms + "," + dataString_flowmeters + "," + dataString_CTs; // C-C-C-C-C-C COMBO BREAKER
+    digitalWrite(10,HIGH); // disable ethernet controller SPI chip select
+    digitalWrite(4,LOW); // enable SD card SPI chip select
     String fileName = String(fileNameModifier) + fileExtension;
     if (!fileCreated)
         while (SD.exists(fileName)) fileName = String(++fileNameModifier) + fileExtension;
@@ -138,10 +124,13 @@ void loop() {
         fileHandle.println(comboDataString);
         fileHandle.close();
         Serial.println(comboDataString); // C-C-C-C-C-C COMBO BREAKER
+        digitalWrite(10,LOW); // enable ethernet controller SPI chip select
+        digitalWrite(4,HIGH); // disable SD card SPI chip select
     }
     else
         Serial.println("Error opening data logging file");
 }
+
 
 float readTherm(int thermPin){
     float thermVolt;
@@ -156,6 +145,7 @@ float readTherm(int thermPin){
 
 float flowmeterFreq = 0; // declaring as global because if the first if statement in readFlowmeter doesn't get satisfied, returned frequency will be the previously measured frequency
 unsigned int numRisingEdges1 = 0, numRisingEdges2 = 0, numRisingEdges3 = 0, numRisingEdges4 = 0;
+float massFlowRate = 0;
 
 float readFlowmeter(int flowmeterNum){
     if(millis() - time_stamp > 500)  
@@ -202,7 +192,8 @@ float readFlowmeter(int flowmeterNum){
             break;
         }   
     }
-    return(flowmeterFreq);
+    massFlowRate = (0.1628*flowmeterFreq) + 1.2825;
+    return(massFlowRate);
 }
 
 
@@ -241,6 +232,7 @@ time_t getNtpTime()
     Serial.println("No NTP Response :-(");
     return 0; // return 0 if unable to get the time
 }
+
 
 // send an NTP request to the time server at the given address
 void sendNTPpacket(IPAddress &address)

@@ -36,14 +36,16 @@ void setup() {
     emon15.current(A15,246.3);
 }
 
+
 float CTArray[numCTs];
 String dataString_CTs;
 
 void loop() {
-    // Possible future improvement Create an array of pointers for iterating over the emon objects. This will
-    //   allow for easier expandability.
-    // Will also need to create a const char* array for iterating over the microcontroller pins in the setup()
-    //   function.
+     /* Possible future improvement Create an array of pointers for iterating over the emon objects. This will
+     *  allow for easier expandability.
+     *  Will also need to create a const char* array for iterating over the microcontroller pins in the setup()
+     *  function. 
+     */
     CTArray[0] = emon1.calcIrms(1480);
     CTArray[1] = emon2.calcIrms(1480);
     CTArray[2] = emon3.calcIrms(1480);
@@ -59,12 +61,10 @@ void loop() {
     CTArray[12] = emon13.calcIrms(1480);
     CTArray[13] = emon14.calcIrms(1480);
     CTArray[14] = emon15.calcIrms(1480);
-    
     dataString_CTs = 
     String(CTArray[0]) + "," + String(CTArray[1]) + "," + String(CTArray[2]) + "," + String(CTArray[3]) + "," + 
     String(CTArray[4]) + "," + String(CTArray[5]) + "," + String(CTArray[6]) + "," + String(CTArray[7]) + "," + 
     String(CTArray[8]) + "," + String(CTArray[9]) + "," + String(CTArray[10]) + "," + String(CTArray[11]) + "," + 
     String(CTArray[12]) + "," + String(CTArray[13]) + "," + String(CTArray[14]);
-
     Serial3.println(dataString_CTs);
 }
