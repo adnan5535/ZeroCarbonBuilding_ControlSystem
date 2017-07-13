@@ -8,7 +8,7 @@
 #include <Ethernet.h>
 #include <EthernetUdp.h>
 
-#define numThermistors 15 // Total number of thermistors in system. Modify this number if adding/removing thermistors
+#define numThermistors 16 // Total number of thermistors in system. Modify this number if adding/removing thermistors
 #define FlowF1 0 // Flow meter numbering, Mega Pin 21
 #define FlowF2 1 // Mega Pin 20
 #define FlowF3 2 // Mega Pin 19
@@ -136,7 +136,7 @@ float readTherm(int thermPin){
     float thermVolt;
     float temp;
     
-    thermVolt = (muxShield.analogReadMS(1,thermPin)) * (5/1023) * 0.94; //0.94 empirical correction for error introduced by mux shield
+    thermVolt = (muxShield.analogReadMS(1,thermPin))*0.0048828; //=raw*5/1024
     temp = (1.8443 * pow(thermVolt,4)) - (14.248 * pow(thermVolt,3)) + (31.071 * pow(thermVolt,2)) + (6.5131 * thermVolt) - 38.282; // Based on curve fit. Excel sheet on Dropbox
     //temp = 5;
     return(temp);
