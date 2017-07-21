@@ -5,8 +5,8 @@
 #include <SPI.h>
 #include <TimeLib.h>
 #include <Ethernet.h>
-#include <EthernetUdp.h>
-
+#include <Ethernet2.h>       // ASH   Andy changed from Ethernet.h  so we match the #2 board
+// #include <EthernetUdp.h>     ASH   Andy commented this line after 'multiple definition' compile errors when using Ethernet2
 
 
 #define numCTs 16
@@ -27,8 +27,7 @@ EnergyMonitor emon13;
 EnergyMonitor emon14;
 EnergyMonitor emon15;
 
-
-byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xCD };
+byte mac[] = { 0xDE, 0xAD, 0xBE, 0xEF, 0xFE, 0xA2 };
 IPAddress timeServer(132, 163, 4, 101); // time-a.timefreq.bldrdoc.gov
 const int timeZone = 0;     // GMT because daylight saving really throws a wrench in calcs
 EthernetUDP Udp;
