@@ -14,7 +14,7 @@ const byte FlowF2 = 20; // Mega Pin 20
 const byte FlowF3 = 19; // Mega Pin 19
 const byte FlowF4 = 18; // Mega Pin 18
 int FlowmeterArray[] = {FlowF1, FlowF2, FlowF3, FlowF4};
-#define numFlowmeters 4 // Total number of flowmeters in system. Modify this number if adding/removing flowmeters
+#define numFlowmeters 4 // Total number of flowmeters in system. Modify this number if adding/removing flowmeters. Also add more switch cases in the read function and add more time stamps. Note that you'll need free interrupt pins. If not available, change the code so that the additional flowmeters can be read via non-interrupt pins.
 #define numCTs 15 // Number of Current Transducers. Modify this number if adding/removing current transducers
 
 MuxShield muxShield; //Initialize the Mux Shield
@@ -156,6 +156,7 @@ float readTherm(int thermPin) {
 
   thermVolt = (muxShield.analogReadMS(1, thermPin)) * 0.0048828; //=raw*5/1024
   temp = (1.1142 * pow(thermVolt, 4)) - (7.9978 * pow(thermVolt, 3)) + (15.56 * pow(thermVolt, 2)) + (17.684 * thermVolt) - 41.503; // Based on curve fit. Excel sheet on Dropbox
+  temp = 0.8657*temp - 24.43;
   return (temp);
 }
 
