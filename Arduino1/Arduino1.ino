@@ -155,8 +155,7 @@ float readTherm(int thermPin) {
   float temp;
 
   thermVolt = (muxShield.analogReadMS(1, thermPin)) * 0.0048828; //=raw*5/1024
-  temp = (1.8443 * pow(thermVolt, 4)) - (14.248 * pow(thermVolt, 3)) + (31.071 * pow(thermVolt, 2)) + (6.5131 * thermVolt) - 38.282; // Based on curve fit. Excel sheet on Dropbox
-  //temp = 5;
+  temp = (1.1142 * pow(thermVolt, 4)) - (7.9978 * pow(thermVolt, 3)) + (15.56 * pow(thermVolt, 2)) + (17.684 * thermVolt) - 41.503; // Based on curve fit. Excel sheet on Dropbox
   return (temp);
 }
 
@@ -220,8 +219,8 @@ float readFlowmeter(int flowmeterNum)
         break;
     }
   }
-  //massFlowRate = (0.1628*flowmeterFreq) + 1.2825;
-  massFlowRate = flowmeterFreq;
+  massFlowRate = (0.1628*flowmeterFreq) + 1.2825;
+  //massFlowRate = flowmeterFreq;
   return (massFlowRate);
 }
 
